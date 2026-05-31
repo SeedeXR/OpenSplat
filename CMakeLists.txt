@@ -8,6 +8,8 @@ set(OPENSPLAT_MAX_CUDA_COMPATIBILITY OFF CACHE BOOL "Build for maximum CUDA devi
 set(OPENSPLAT_BUILD_VISUALIZER OFF CACHE BOOL "Build visualizer application")
 set(OPENSPLAT_USE_FAST_MATH OFF CACHE BOOL "Enable fast math optimizations for GPU kernels (-use_fast_math / -ffast-math)")
 
+set(FETCH_DEPENDENCIES ON CACHE BOOL "Fetch additional dependencies from the Internet during configuration")
+
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR})
 
 # Read version
@@ -45,24 +47,37 @@ if(OPENSPLAT_USE_FAST_MATH)
     set(CUDA_NVCC_FLAGS ${CUDA_NVCC_FLAGS} --use_fast_math)
 endif()
 
+# Fetch/find additional dependencies
 include(FetchContent)
-FetchContent_Declare(nlohmann_json
-    URL https://github.com/nlohmann/json/archive/refs/tags/v3.11.3.zip
-)
+
 set(NANOFLANN_BUILD_EXAMPLES OFF)
 set(NANOFLANN_BUILD_TESTS OFF)
-FetchContent_Declare(nanoflann
-    URL https://github.com/jlblancoc/nanoflann/archive/refs/tags/v1.5.5.zip
-)
-FetchContent_Declare(cxxopts
-    URL https://github.com/jarro2783/cxxopts/archive/refs/tags/v3.2.0.zip
-)
-FetchContent_MakeAvailable(nlohmann_json nanoflann cxxopts)
-if((GPU_RUNTIME STREQUAL "CUDA") OR (GPU_RUNTIME STREQUAL "HIP"))
-    FetchContent_Declare(glm
-        URL https://github.com/g-truc/glm/archive/refs/tags/1.0.1.zip
+if(FETCH_DEPENDENCIES)
+    FetchContent_Declare(nlohmann_json
+        URL https://github.com/nlohmann/json/archive/refs/tags/v3.11.3.zip
     )
-    FetchContent_MakeAvailable(glm)
+    FetchContent_Declare(nanoflann
+        URL https://github.com/jlblancoc/nanoflann/archive/refs/tags/v1.5.5.zip
+    )
+    FetchContent_Declare(cxxopts
+        URL https://github.com/jarro2783/cxxopts/archive/refs/tags/v3.2.0.zip
+    )
+    FetchContent_MakeAvailable(nlohmann_json nanoflann cxxopts)
+else()
+    find_package(nlohmann_json)
+    find_package(nanoflann)
+    find_package(cxxopts)
+endif()
+
+if((GPU_RUNTIME STREQUAL "CUDA") OR (GPU_RUNTIME STREQUAL "HIP"))
+    if(FETCH_DEPENDENCIES)
+        FetchContent_Declare(glm
+            URL https://github.com/g-truc/glm/archive/refs/tags/1.0.1.zip
+        )
+        FetchContent_MakeAvailable(glm)
+    else()
+        find_package(glm)
+    endif()
 endif()
 
 if(NOT CMAKE_BUILD_TYPE)
