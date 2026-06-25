@@ -9,6 +9,11 @@ on:
   release:
     types: [ published, edited ]
 
+# Cancel superseded in-progress runs on the same ref (PR branch) to conserve runner capacity.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   build:
     name: ${{ matrix.os }}-${{ matrix.arch }}-torch-${{ matrix.torch-version }}-${{ matrix.cmake-build-type }}
@@ -81,7 +86,7 @@ jobs:
         id: cache-builds
         with:
           key: ${{ matrix.os }}-${{ matrix.arch }}-torch-${{ matrix.cmake-build-type }}-ccache-${{ github.run_id }}
-          restore-keys: ${{ matrix.os }}-cpu-torch-${{ matrix.cmake-build-type }}-ccache-
+          restore-keys: ${{ matrix.os }}-${{ matrix.arch }}-torch-${{ matrix.cmake-build-type }}-ccache-
           path: ${{ env.CCACHE_DIR }}
 
       - name: Configure And Build
@@ -107,6 +112,20 @@ jobs:
             -DOPENSPLAT_BUILD_SIMPLE_TRAINER=ON
           ninja
           ls -l .
+
+      # Run tests on a SINGLE cell — macOS 14 (Apple Silicon / arm64), our reference platform.
+      # GitHub macOS runners are the most capacity-constrained, so build only the lightweight
+      # unit + regression suites here and skip the heavier integration target (covered on Linux).
+      - name: Build And Run Tests
+        if: ${{ matrix.os == 'macos-14' && matrix.arch == 'arm64' && matrix.torch-version == '2.3.1' && matrix.cmake-build-type == 'Release' }}
+        run: |
+          set -x
+          cd build
+          cmake .. -DOPENSPLAT_BUILD_TESTS=ON
+          # Build only the lightweight suites (aggregate excludes the HEAVY integration target);
+          # defined in test/CMakeLists.txt so this never drifts.
+          ninja opensplat_unit_tests
+          ctest --output-on-failure -E test_integration
 
       - name: Save Artifacts
         if: ${{ matrix.os == 'macos-14' && matrix.arch == 'arm64' && matrix.torch-version == '2.2.1' && matrix.cmake-build-type == 'Release' }}

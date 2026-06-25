@@ -9,6 +9,11 @@ on:
   release:
     types: [ published, edited ]
 
+# Cancel superseded in-progress runs on the same ref (PR branch) to conserve runner capacity.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   build:
     name: ${{ matrix.os }}-cpu-torch-${{ matrix.torch-version }}-${{ matrix.cmake-build-type }}
@@ -90,6 +95,19 @@ jobs:
             -DCMAKE_INSTALL_PREFIX=${{github.workspace}}/install \
             -DOPENSPLAT_BUILD_SIMPLE_TRAINER=ON
           ninja
+
+      # Run the test suite on a SINGLE matrix cell only (GitHub-hosted runners are
+      # capacity-limited; no need to test on every torch version / OS combination).
+      - name: Build And Run Tests
+        if: ${{ matrix.os == 'ubuntu-22.04' && matrix.torch-version == '2.3.1' && matrix.cmake-build-type == 'Release' }}
+        run: |
+          set -x
+          cd build
+          cmake .. -DOPENSPLAT_BUILD_TESTS=ON
+          # Linux runner: build every suite (incl. the heavier integration target).
+          # The aggregate target is defined in test/CMakeLists.txt so this never drifts.
+          ninja opensplat_all_tests
+          ctest --output-on-failure
 
       - name: Save Artifacts
         if: ${{ matrix.os == 'ubuntu-22.04' && matrix.torch-version == '2.2.1' && matrix.cmake-build-type == 'Release' }}

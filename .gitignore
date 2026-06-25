@@ -6,3 +6,15 @@ build/
 my_build/
 .idea/
 .vscode/
+
+# Compiled binaries
+output/
+
+# Trained splats (.ply / .splat)
+splat_output/
+
+# Downloaded test datasets (see scripts/fetch_test_data.sh)
+data/
+
+# Agent working memory — local only, not pushed (see memory/README.md)
+memory/

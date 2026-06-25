@@ -10,7 +10,17 @@ set(OPENSPLAT_USE_FAST_MATH OFF CACHE BOOL "Enable fast math optimizations for G
 
 set(FETCH_DEPENDENCIES ON CACHE BOOL "Fetch additional dependencies from the Internet during configuration")
 
-set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR})
+# Default binary output is the build dir (upstream behavior — keeps CI artifact paths,
+# the Dockerfiles, and the README run instructions valid). scripts/build.sh passes
+# -DCMAKE_RUNTIME_OUTPUT_DIRECTORY=<repo>/output for its convenience workflow; you can
+# override the same way. The guard makes that -D override take effect.
+if(NOT CMAKE_RUNTIME_OUTPUT_DIRECTORY)
+    set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR})
+endif()
+
+# Optional: build the test suite under test/ (unit / integration / regression).
+# OFF by default so normal and CI builds are unaffected.
+option(OPENSPLAT_BUILD_TESTS "Build the OpenSplat test suite (test/)" OFF)
 
 # Read version
 file(READ "VERSION" APP_VERSION)
@@ -251,15 +261,30 @@ endif()
 add_library(gsplat_cpu rasterizer/gsplat-cpu/gsplat_cpu.cpp)
 target_include_directories(gsplat_cpu PRIVATE ${TORCH_INCLUDE_DIRS})
 
-set(OPENSPLAT_SRC_FILES opensplat.cpp point_io.cpp nerfstudio.cpp model.cpp
-kdtree_tensor.cpp spherical_harmonics.cpp cv_utils.cpp utils.cpp project_gaussians.cpp
-rasterize_gaussians.cpp ssim.cpp optim_scheduler.cpp colmap.cpp opensfm.cpp openmvg.cpp input_data.cpp
-tensor_math.cpp)
+# Source files are organized under src/ by responsibility:
+#   src/app    - executables & UI (opensplat, simple_trainer, visualizer)
+#   src/io     - dataset/SfM loaders & point cloud IO
+#   src/model  - gaussian model & training components
+#   src/render - projection & rasterization
+#   src/common - shared math/utility helpers
+# See docs/repo_organization.md for the full map.
+set(OPENSPLAT_INCLUDE_DIRS
+    ${PROJECT_SOURCE_DIR}/src/app
+    ${PROJECT_SOURCE_DIR}/src/io
+    ${PROJECT_SOURCE_DIR}/src/model
+    ${PROJECT_SOURCE_DIR}/src/render
+    ${PROJECT_SOURCE_DIR}/src/common
+)
+
+set(OPENSPLAT_SRC_FILES src/app/opensplat.cpp src/io/point_io.cpp src/io/nerfstudio.cpp src/model/model.cpp
+src/model/kdtree_tensor.cpp src/model/spherical_harmonics.cpp src/common/cv_utils.cpp src/common/utils.cpp src/render/project_gaussians.cpp
+src/render/rasterize_gaussians.cpp src/render/ssim.cpp src/model/optim_scheduler.cpp src/io/colmap.cpp src/io/opensfm.cpp src/io/openmvg.cpp src/io/input_data.cpp
+src/common/tensor_math.cpp)
 
 if (OPENSPLAT_BUILD_VISUALIZER)
     if (Pangolin_FOUND)
         message(STATUS "Found Pangolin. Building visualizer (beta)")
-        list(APPEND OPENSPLAT_SRC_FILES visualizer.cpp)
+        list(APPEND OPENSPLAT_SRC_FILES src/app/visualizer.cpp)
         add_definitions(-DUSE_VISUALIZATION)
     else()
         message(FATAL "Pangolin not found. Cannot build visualizer (beta)")
@@ -272,6 +297,7 @@ install(TARGETS opensplat DESTINATION bin)
 set_property(TARGET opensplat PROPERTY CXX_STANDARD 17)
 target_include_directories(opensplat PRIVATE
     ${PROJECT_SOURCE_DIR}/rasterizer
+    ${OPENSPLAT_INCLUDE_DIRS}
     ${GPU_INCLUDE_DIRS}
 )
 target_link_libraries(opensplat PUBLIC ${STDPPFS_LIBRARY} ${GPU_LIBRARIES} ${GSPLAT_LIBS} ${TORCH_LIBRARIES} ${OpenCV_LIBS})
@@ -295,10 +321,11 @@ elseif(GPU_RUNTIME STREQUAL "MPS")
 endif()
 
 if(OPENSPLAT_BUILD_SIMPLE_TRAINER)
-    add_executable(simple_trainer simple_trainer.cpp project_gaussians.cpp rasterize_gaussians.cpp cv_utils.cpp)
+    add_executable(simple_trainer src/app/simple_trainer.cpp src/render/project_gaussians.cpp src/render/rasterize_gaussians.cpp src/common/cv_utils.cpp)
     install(TARGETS simple_trainer DESTINATION bin)
     target_include_directories(simple_trainer PRIVATE
         ${PROJECT_SOURCE_DIR}/rasterizer
+        ${OPENSPLAT_INCLUDE_DIRS}
         ${GPU_INCLUDE_DIRS}
     )
     target_link_libraries(simple_trainer PUBLIC ${GPU_LIBRARIES} ${GSPLAT_LIBS} ${TORCH_LIBRARIES} ${OpenCV_LIBS})
@@ -335,3 +362,8 @@ if (MSVC)
 endif (MSVC)
 
 add_compile_definitions(GLOG_USE_GLOG_EXPORT)
+
+if(OPENSPLAT_BUILD_TESTS)
+    enable_testing()
+    add_subdirectory(test)
+endif()

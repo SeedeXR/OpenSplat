@@ -1,0 +1,58 @@
+site_name: OpenSplat Documentation
+site_description: System documentation for OpenSplat — 3D Gaussian Splatting in C++
+# Project Pages are served under /OpenSplat/; set site_url so canonical links + sitemap are correct.
+site_url: https://seedexr.github.io/OpenSplat/
+repo_url: https://github.com/SeedeXR/OpenSplat
+repo_name: SeedeXR/OpenSplat
+
+# Build the site from the system docs in docs/. (memory/ is intentionally git-ignored and
+# not published; the agent operating framework is local-only.)
+docs_dir: docs
+
+theme:
+  name: material
+  features:
+    - navigation.top
+    - navigation.sections
+    - content.code.copy
+    - search.suggest
+    - toc.follow
+  palette:
+    - scheme: default
+      primary: indigo
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+    - scheme: slate
+      primary: indigo
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+
+markdown_extensions:
+  - admonition
+  - tables
+  - pymdownx.details
+  - pymdownx.highlight
+  - pymdownx.inlinehilite
+  - toc:
+      permalink: true
+  # Render ```mermaid fenced blocks as diagrams (Material bundles mermaid.js).
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
+
+plugins:
+  - search
+
+nav:
+  - Home: README.md
+  - Getting Started: getting_started.md
+  - Architecture: architecture.md
+  - System Mindmap: mindmap.md
+  - Repository Organization: repo_organization.md
+  - Testing: testing.md
+  - Design & UX: design.md
+  - Project Context: project_context.md
