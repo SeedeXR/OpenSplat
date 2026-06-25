@@ -5,6 +5,7 @@
 #include "utils.hpp"
 #include "cv_utils.hpp"
 #include "constants.hpp"
+#include "resource.hpp"
 #include <cxxopts.hpp>
 
 #ifdef USE_VISUALIZATION
@@ -42,6 +43,15 @@ int main(int argc, char *argv[]){
         ("stop-screen-size-at", "Stop splitting gaussians that are larger than [split-screen-size] after these many steps", cxxopts::value<int>()->default_value("4000"))
         ("split-screen-size", "Split gaussians that are larger than this percentage of screen space", cxxopts::value<float>()->default_value("0.05"))
         ("colmap-image-path", "Override the default image path for COLMAP-based input", cxxopts::value<std::string>()->default_value(""))
+
+        // ---- Resource-aware process contract (CLI > env OPENSPLAT_* > --contract JSON > auto) ----
+        ("profile", "Resource profile: auto | 2gb | 4gb | 6gb | 8gb | full-throttle", cxxopts::value<std::string>()->default_value(""))
+        ("contract", "Path to a JSON process-contract file overriding resource policy", cxxopts::value<std::string>()->default_value(""))
+        ("ram-budget-mb", "Host RAM budget in MB (0 = auto-detect)", cxxopts::value<long long>()->default_value("0"))
+        ("vram-budget-mb", "GPU VRAM budget in MB (0 = auto-detect)", cxxopts::value<long long>()->default_value("0"))
+        ("max-splats", "Hard cap on gaussian count to bound VRAM (0 = unbounded)", cxxopts::value<long long>()->default_value("0"))
+        ("image-store", "Host image store: auto | f32 | u8 (u8 uses ~4x less RAM)", cxxopts::value<std::string>()->default_value(""))
+        ("min-render-px", "Warn if the render's long side falls below this (quality guard)", cxxopts::value<int>()->default_value("0"))
 #ifdef USE_VISUALIZATION
         ("has-visualization", "Show the visualization steps of training", cxxopts::value<bool>()->default_value("0"))
 #endif
@@ -121,8 +131,69 @@ int main(int argc, char *argv[]){
     try{
         InputData inputData = inputDataFromX(projectRoot, colmapImageSourcePath);
 
-        parallel_for(inputData.cameras.begin(), inputData.cameras.end(), [&downScaleFactor](Camera &cam){
-            cam.loadImage(downScaleFactor);
+        // ---- Resolve the resource-aware process contract --------------------
+        rc::SceneInfo scene;
+        scene.numImages = static_cast<int>(inputData.cameras.size());
+        if (!inputData.cameras.empty()){
+            scene.repWidth = inputData.cameras[0].width;
+            scene.repHeight = inputData.cameras[0].height;
+        }
+        rc::HardwareInfo hw = rc::detectHardware(device == torch::kCUDA);
+
+        rc::Overrides cliOv;
+        if (result.count("profile") && !result["profile"].as<std::string>().empty()){
+            cliOv.profile = result["profile"].as<std::string>(); cliOv.profile_set = true;
+        }
+        if (result.count("ram-budget-mb") && result["ram-budget-mb"].as<long long>() > 0){
+            cliOv.ramBudgetMB = result["ram-budget-mb"].as<long long>(); cliOv.ramBudgetMB_set = true;
+        }
+        if (result.count("vram-budget-mb") && result["vram-budget-mb"].as<long long>() > 0){
+            cliOv.vramBudgetMB = result["vram-budget-mb"].as<long long>(); cliOv.vramBudgetMB_set = true;
+        }
+        if (result.count("max-splats") && result["max-splats"].as<long long>() > 0){
+            cliOv.maxGaussians = result["max-splats"].as<long long>(); cliOv.maxGaussians_set = true;
+        }
+        if (result.count("image-store") && !result["image-store"].as<std::string>().empty()){
+            cliOv.imageStore = result["image-store"].as<std::string>(); cliOv.imageStore_set = true;
+        }
+        if (result.count("min-render-px") && result["min-render-px"].as<int>() > 0){
+            cliOv.minRenderPx = result["min-render-px"].as<int>(); cliOv.minRenderPx_set = true;
+        }
+        // The pre-existing -d/--downscale-factor flag feeds the contract as a CLI override.
+        if (result.count("downscale-factor")){
+            cliOv.downscaleFactor = downScaleFactor; cliOv.downscaleFactor_set = true;
+        }
+
+        rc::Overrides envOv = rc::overridesFromEnv();
+        rc::Overrides jsonOv;
+        std::string contractPath = result["contract"].as<std::string>();
+        if (contractPath.empty()){ const char *e = std::getenv("OPENSPLAT_CONTRACT"); if (e) contractPath = e; }
+        if (!contractPath.empty()){
+            std::string err;
+            jsonOv = rc::overridesFromJsonFile(contractPath, &err);
+            if (!err.empty()) std::cerr << "WARNING: contract file ignored: " << err << std::endl;
+        }
+
+        rc::Contract contract = rc::resolvePolicy(hw, scene, cliOv, envOv, jsonOv);
+        rc::printContract(contract, hw, scene);
+
+        const float effectiveDownscale = contract.downscaleFromContract ? contract.downscaleFactor : downScaleFactor;
+        const bool storeU8 = contract.imageStore == rc::ImageStore::U8;
+
+        // Quality guard (RESULTS.md Finding #2): over-downscaling small images diverges.
+        if (contract.minRenderPx > 0 && scene.repWidth > 0){
+            int longSide = (std::max)(scene.repWidth, scene.repHeight);
+            int renderLong = static_cast<int>(longSide / (std::max)(effectiveDownscale, 1.0f));
+            if (renderLong < contract.minRenderPx){
+                std::cerr << "WARNING: render long side ~" << renderLong << " px < min-render-px "
+                          << contract.minRenderPx << " (downscale " << effectiveDownscale
+                          << "). Training may diverge on small images; consider a smaller --downscale-factor."
+                          << std::endl;
+            }
+        }
+
+        parallel_for(inputData.cameras.begin(), inputData.cameras.end(), [&effectiveDownscale, &storeU8](Camera &cam){
+            cam.loadImage(effectiveDownscale, storeU8);
         });
 
         // Withhold a validation camera if necessary
@@ -135,7 +206,8 @@ int main(int argc, char *argv[]){
                     numDownscales, resolutionSchedule, shDegree, shDegreeInterval, 
                     refineEvery, warmupLength, resetAlphaEvery, densifyGradThresh, densifySizeThresh, stopScreenSizeAt, splitScreenSize,
                     numIters, keepCrs,
-                    device);
+                    device,
+                    contract.maxGaussians);
 
         std::vector< size_t > camIndices( cams.size() );
         std::iota( camIndices.begin(), camIndices.end(), 0 );
@@ -154,8 +226,7 @@ int main(int argc, char *argv[]){
             model.optimizersZeroGrad();
 
             torch::Tensor rgb = model.forward(cam, step);
-            torch::Tensor gt = cam.getImage(model.getDownscaleFactor(step));
-            gt = gt.to(device);
+            torch::Tensor gt = cam.getImageToDevice(model.getDownscaleFactor(step), device);
 
             torch::Tensor mainLoss = model.mainLoss(rgb, gt, ssimWeight);
             mainLoss.backward();
@@ -202,7 +273,7 @@ int main(int argc, char *argv[]){
         // Validate
         if (valCam != nullptr){
             torch::Tensor rgb = model.forward(*valCam, numIters);
-            torch::Tensor gt = valCam->getImage(model.getDownscaleFactor(numIters)).to(device);
+            torch::Tensor gt = valCam->getImageToDevice(model.getDownscaleFactor(numIters), device);
             std::cout << valCam->filePath << " validation loss: " << model.mainLoss(rgb, gt, ssimWeight).item<float>() << std::endl; 
         }
     }catch(const std::exception &e){

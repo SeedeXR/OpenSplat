@@ -37,11 +37,12 @@ torch::Tensor Camera::getIntrinsicsMatrix(){
                           {0.0f, 0.0f, 1.0f}}, torch::kFloat32);
 }
 
-void Camera::loadImage(float downscaleFactor){
+void Camera::loadImage(float downscaleFactor, bool storeU8){
     // Populates image and K, then updates the camera parameters
     // Caution: this function has destructive behaviors
     // and should be called only once
-    if (image.numel()) std::runtime_error("loadImage already called");
+    if (image.numel()) throw std::runtime_error("loadImage already called");
+    storedU8 = storeU8;
     std::cout << "Loading " << filePath << std::endl;
 
     cv::Mat cImg = imreadRGB(filePath);
@@ -77,11 +78,11 @@ void Camera::loadImage(float downscaleFactor){
         cv::Mat undistorted = cv::Mat::zeros(cImg.rows, cImg.cols, cImg.type());
         cv::undistort(cImg, undistorted, cK, distCoeffs, newK);
         
-        image = imageToTensor(undistorted);
+        image = storeU8 ? imageToU8Tensor(undistorted) : imageToTensor(undistorted);
         K = floatNxNMatToTensor(newK);
     }else{
         roi = cv::Rect(0, 0, cImg.cols, cImg.rows);
-        image = imageToTensor(cImg);
+        image = storeU8 ? imageToU8Tensor(cImg) : imageToTensor(cImg);
     }
 
     // Crop to ROI
@@ -97,23 +98,37 @@ void Camera::loadImage(float downscaleFactor){
 }
 
 torch::Tensor Camera::getImage(int downscaleFactor){
-    if (downscaleFactor <= 1) return image;
+    // `image` may be stored as uint8 [0,255] (resource-aware u8 store) or float [0,1].
+    // getImage always returns a float [0,1] tensor.
+    auto toF32 = [this](const torch::Tensor &t) -> torch::Tensor {
+        return storedU8 ? (t.toType(torch::kFloat32) / 255.0f) : t;
+    };
+
+    if (downscaleFactor <= 1) return toF32(image);
     else{
-
-        // torch::jit::script::Module container = torch::jit::load("gt.pt");
-        // return container.attr("val").toTensor();
-
         if (imagePyramids.find(downscaleFactor) != imagePyramids.end()){
             return imagePyramids[downscaleFactor];
         }
 
-        // Rescale, store and return
-        cv::Mat cImg = tensorToImage(image);
+        // Rescale, store and return (pyramids are cached as float; they are small).
+        cv::Mat cImg = tensorToImage(toF32(image));
         cv::resize(cImg, cImg, cv::Size(cImg.cols / downscaleFactor, cImg.rows / downscaleFactor), 0.0, 0.0, cv::INTER_AREA);
         torch::Tensor t = imageToTensor(cImg);
         imagePyramids[downscaleFactor] = t;
         return t;
     }
+}
+
+torch::Tensor Camera::getImageToDevice(int downscaleFactor, const torch::Device &device){
+    // Hot-path helper for the training loop. With the uint8 host store and no
+    // downscale (the common case for most of training), copy the small uint8
+    // tensor to the device and convert there — this avoids allocating a fresh
+    // full-res float32 tensor on the CPU every iteration and shrinks the H2D
+    // copy 4x. All other cases defer to getImage() (f32, or cached f32 pyramids).
+    if (storedU8 && downscaleFactor <= 1){
+        return image.to(device).toType(torch::kFloat32) / 255.0f;
+    }
+    return getImage(downscaleFactor).to(device);
 }
 
 bool Camera::hasDistortionParameters(){

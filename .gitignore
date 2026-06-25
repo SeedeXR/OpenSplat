@@ -18,3 +18,15 @@ data/
 
 # Agent working memory — local only, not pushed (see memory/README.md)
 memory/
+
+# Linux/CUDA optimization research — local only, downloaded at end (see task)
+linux_research/
+
+# stray run artifacts (root)
+/splat.ply
+/cameras.json
+/build_*.log
+
+# fast-math A/B build (local benchmark artifact)
+build_fm/
+output_fm/

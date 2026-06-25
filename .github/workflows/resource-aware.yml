@@ -1,0 +1,276 @@
+name: OpenSplat (Resource-Aware, Hosted CPU)
+
+# Validates the resource-aware process-contract features on GitHub-HOSTED runners.
+#
+# RUNNER LIMITS WE DESIGN AROUND (ubuntu-latest standard, public-repo default 2024+):
+#   * 4 vCPU, 16 GB RAM, ~14 GB free SSD.
+#   * NO NVIDIA GPU is attached to hosted runners.
+# Consequences enforced below:
+#   * We build CPU-only (GPU_RUNTIME=CPU). With no CUDA toolkit/device, CUDA training
+#     cannot run, so we never attempt it.
+#   * Disk is tight, so we use the CPU libtorch zip + apt OpenCV (identical to
+#     ubuntu-cpu.yml) rather than a CUDA toolchain. Build with -j$(nproc).
+#   * CPU rasterization is ~100x slower than GPU; any CPU "training" here is a few
+#     iterations at most, purely to prove the contract prints and the run starts.
+#
+# ---------------------------------------------------------------------------------
+# WHY CUDA PATHS ARE NOT EXERCISED HERE, AND HOW A SELF-HOSTED GPU RUNNER WOULD:
+#
+#   The CUDA integration test (test_integration_cuda) is COMPILE-GUARDED in
+#   test/CMakeLists.txt behind `if(GPU_RUNTIME STREQUAL "CUDA")`, so under this
+#   CPU build the target simply does not exist and `ctest` will not list it. The CPU
+#   `test_integration` target exercises the real CPU rasterizer instead. This is the
+#   intended behaviour on a GPU-less runner.
+#
+#   On a SELF-HOSTED GPU runner one would, in addition to everything below:
+#     * configure with -DGPU_RUNTIME=CUDA (so test_integration_cuda compiles), then
+#       `ctest --output-on-failure` runs BOTH test_integration and
+#       test_integration_cuda (the CUDA one skips at runtime if no device is seen).
+#     * run the resource harness against REAL cgroup limits, e.g.
+#         python3 scripts/bench_resource.py --bin ./build/opensplat \
+#           --dataset <scene> --budget-gb 4 --enforce cgroup --extra-args "-n 200"
+#       On hosted runners /sys/fs/cgroup is not memory-delegated/writable, so the
+#       harness's enforce=auto correctly falls back to a peak-RSS watchdog (same as
+#       on Colab). Only a self-hosted box with a delegated cgroup v2 gets a real
+#       kernel memory.max limit and a true OOM-kill signal.
+# ---------------------------------------------------------------------------------
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    types: [ assigned, opened, synchronize, reopened ]
+
+# Cancel superseded in-progress runs on the same ref to conserve runner capacity.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # =================================================================================
+  # Job 1: Build CPU + run the full hosted-friendly test suite via ctest.
+  # =================================================================================
+  build-and-test:
+    name: cpu-build-and-tests
+    runs-on: ubuntu-22.04
+    timeout-minutes: 60
+    env:
+      TORCH_VERSION: "2.3.1"
+      CCACHE_DIR: ${{ github.workspace }}/ccache
+      CCACHE_BASEDIR: ${{ github.workspace }}
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Setup Ubuntu
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential \
+            cmake \
+            ninja-build \
+            libopencv-dev \
+            wget \
+            unzip \
+            python3
+          wget -nv https://github.com/ccache/ccache/releases/download/v4.9.1/ccache-4.9.1-linux-x86_64.tar.xz
+          sudo tar xf ccache-4.9.1-linux-x86_64.tar.xz -C /usr/bin --strip-components=1 --no-same-owner ccache-4.9.1-linux-x86_64/ccache
+          rm -f ccache-*-linux-x86_64.tar.xz
+          ccache --version
+
+      - name: Sudo Tar Wrapper
+        run: |
+          # Workaround: https://github.com/containers/podman/discussions/17868
+          sudo mv -fv /usr/bin/tar /usr/bin/tar.orig
+          echo -e '#!/bin/sh\n\nsudo /usr/bin/tar.orig "$@"' | sudo tee -a /usr/bin/tar
+          sudo chmod +x /usr/bin/tar
+
+      - name: Restore LibTorch Cache
+        uses: actions/cache@v4
+        id: libtorch-cache
+        with:
+          key: libtorch-${{ env.TORCH_VERSION }}-cpu-ubuntu
+          path: |
+            ${{ github.workspace }}/libtorch
+
+      - name: Install LibTorch (CPU)
+        if: ${{ steps.libtorch-cache.outputs.cache-hit != 'true' }}
+        run: |
+          # CPU libtorch keeps the download/disk footprint small on the ~14 GB runner SSD.
+          wget --no-check-certificate -nv https://download.pytorch.org/libtorch/cpu/libtorch-cxx11-abi-shared-with-deps-${{ env.TORCH_VERSION }}%2Bcpu.zip -O libtorch.zip
+          unzip -q ${{ github.workspace }}/libtorch.zip -d ${{ github.workspace }}/
+          rm ${{ github.workspace }}/libtorch.zip
+
+      - name: Cache Build
+        uses: actions/cache@v4
+        id: cache-builds
+        with:
+          key: resource-aware-cpu-ccache-${{ github.run_id }}
+          restore-keys: resource-aware-cpu-ccache-
+          path: ${{ env.CCACHE_DIR }}
+
+      - name: Configure And Build (CPU, tests ON)
+        run: |
+          set -x
+          mkdir -p build
+          cd build
+          # GPU_RUNTIME=CPU is implied (no CUDA toolkit present), but we make the
+          # CPU-only intent explicit so the build never tries to pull a CUDA toolchain.
+          cmake .. \
+            -GNinja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_C_COMPILER_LAUNCHER=$(which ccache) \
+            -DCMAKE_CXX_COMPILER_LAUNCHER=$(which ccache) \
+            -DCMAKE_PREFIX_PATH=${{ github.workspace }}/libtorch \
+            -DGPU_RUNTIME=CPU \
+            -DOPENSPLAT_BUILD_TESTS=ON
+          # Build the aggregate target (defined in test/CMakeLists.txt) so CI never
+          # hand-lists test names. On a CPU build this excludes test_integration_cuda,
+          # which is compile-guarded out entirely.
+          ninja -j$(nproc) opensplat opensplat_all_tests
+
+      - name: Run Test Suite (ctest)
+        run: |
+          set -x
+          cd build
+          # Runs the fast NO_TORCH resource unit + regression tests (test_resource,
+          # test_regression_resource), the CPU unit suite, and the CPU integration
+          # test (test_integration). test_integration_cuda does not exist in a CPU
+          # build, so ctest will not attempt it.
+          ctest --output-on-failure
+
+      - name: Clean Compiler Cache
+        if: ${{ always() }}
+        run: |
+          set -x
+          ccache --show-stats
+          ccache --evict-older-than 7d
+          ccache -s
+
+  # =================================================================================
+  # Job 2: Small resource-aware smoke test. Proves the process-contract CLI works
+  # WITHOUT a GPU. No heavy training (CPU is ~100x slower than GPU); heavy/real
+  # training and real cgroup enforcement belong on a self-hosted GPU runner (see the
+  # note block at the top of this file).
+  # =================================================================================
+  resource-smoke:
+    name: cpu-resource-smoke
+    runs-on: ubuntu-22.04
+    needs: build-and-test
+    timeout-minutes: 45
+    env:
+      TORCH_VERSION: "2.3.1"
+      CCACHE_DIR: ${{ github.workspace }}/ccache
+      CCACHE_BASEDIR: ${{ github.workspace }}
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Setup Ubuntu
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential \
+            cmake \
+            ninja-build \
+            libopencv-dev \
+            wget \
+            unzip \
+            python3
+          wget -nv https://github.com/ccache/ccache/releases/download/v4.9.1/ccache-4.9.1-linux-x86_64.tar.xz
+          sudo tar xf ccache-4.9.1-linux-x86_64.tar.xz -C /usr/bin --strip-components=1 --no-same-owner ccache-4.9.1-linux-x86_64/ccache
+          rm -f ccache-*-linux-x86_64.tar.xz
+
+      - name: Sudo Tar Wrapper
+        run: |
+          # Workaround: https://github.com/containers/podman/discussions/17868
+          sudo mv -fv /usr/bin/tar /usr/bin/tar.orig
+          echo -e '#!/bin/sh\n\nsudo /usr/bin/tar.orig "$@"' | sudo tee -a /usr/bin/tar
+          sudo chmod +x /usr/bin/tar
+
+      - name: Restore LibTorch Cache
+        uses: actions/cache@v4
+        id: libtorch-cache
+        with:
+          # Shares the cache key with the build job so this job reuses the same CPU libtorch.
+          key: libtorch-${{ env.TORCH_VERSION }}-cpu-ubuntu
+          path: |
+            ${{ github.workspace }}/libtorch
+
+      - name: Install LibTorch (CPU)
+        if: ${{ steps.libtorch-cache.outputs.cache-hit != 'true' }}
+        run: |
+          wget --no-check-certificate -nv https://download.pytorch.org/libtorch/cpu/libtorch-cxx11-abi-shared-with-deps-${{ env.TORCH_VERSION }}%2Bcpu.zip -O libtorch.zip
+          unzip -q ${{ github.workspace }}/libtorch.zip -d ${{ github.workspace }}/
+          rm ${{ github.workspace }}/libtorch.zip
+
+      - name: Cache Build
+        uses: actions/cache@v4
+        id: cache-builds
+        with:
+          key: resource-aware-cpu-ccache-${{ github.run_id }}-smoke
+          restore-keys: resource-aware-cpu-ccache-
+          path: ${{ env.CCACHE_DIR }}
+
+      - name: Build opensplat (CPU)
+        run: |
+          set -x
+          mkdir -p build
+          cd build
+          cmake .. \
+            -GNinja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_C_COMPILER_LAUNCHER=$(which ccache) \
+            -DCMAKE_CXX_COMPILER_LAUNCHER=$(which ccache) \
+            -DCMAKE_PREFIX_PATH=${{ github.workspace }}/libtorch \
+            -DGPU_RUNTIME=CPU
+          ninja -j$(nproc) opensplat
+
+      - name: Resource contract CLI smoke (no GPU required)
+        run: |
+          set -euxo pipefail
+          cd build
+          # 1) --help exits 0 and the resource-aware flags are advertised in usage.
+          ./opensplat --help | tee help.txt
+          grep -q -- "--profile" help.txt
+          grep -q -- "--contract" help.txt
+          grep -q -- "--ram-budget-mb" help.txt
+          grep -q -- "--vram-budget-mb" help.txt
+
+          # 2) A profile-style invocation must PARSE cleanly. --help short-circuits
+          #    before any dataset load / training, so this proves the flag combination
+          #    is accepted without needing a GPU or a dataset.
+          ./opensplat --profile 2gb --help >/dev/null
+          ./opensplat --ram-budget-mb 2048 --vram-budget-mb 512 --help >/dev/null
+
+          # 3) With a resource flag set but NO --input, opensplat prints usage and
+          #    exits 0 (graceful, no dataset load, no crash) -- it must not segfault.
+          ./opensplat --profile 2gb | grep -q -- "--profile"
+
+          # 4) A genuinely bad flag must be rejected (parse error -> non-zero exit),
+          #    proving argument validation still works alongside the resource flags.
+          if ./opensplat --profile 2gb --not-a-real-flag >/dev/null 2>&1; then
+            echo "ERROR: opensplat accepted an unknown flag"; exit 1
+          fi
+          echo "Resource-aware CLI contract smoke OK."
+
+      # Optional, OFF by default: a minimal CPU run that prints the resource contract.
+      # CPU rasterization is ~100x slower than GPU, so this is intentionally gated and
+      # capped to a few iterations. Real/heavy training is a self-hosted GPU concern.
+      # To enable locally, point OPENSPLAT_SMOKE_DATASET at a tiny scene directory.
+      - name: Optional tiny CPU run (prints contract, few iters)
+        if: ${{ env.OPENSPLAT_SMOKE_DATASET != '' }}
+        env:
+          OPENSPLAT_SMOKE_DATASET: ""
+        run: |
+          set -euxo pipefail
+          cd build
+          # --cpu forces CPU; --profile 2gb prints the resolved contract; -n keeps it tiny.
+          ./opensplat --cpu --profile 2gb -n 2 -i "$OPENSPLAT_SMOKE_DATASET" \
+            | tee run.txt
+          grep -q "OpenSplat resource contract" run.txt

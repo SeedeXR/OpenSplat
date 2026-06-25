@@ -29,6 +29,10 @@ If you're on macOS or Linux check the [build](#build) section below.
 
 You can build OpenSplat with or without GPU support.
 
+> On **Linux**, the build also generates the `opensplat(1)` man page and `cmake --install`
+> (or `sudo make install`) places it on the `man` path, so `man opensplat` shows the full
+> manual. Turn it off with `-DOPENSPLAT_BUILD_MANPAGE=OFF`.
+
 Requirements for all builds:
 
  * **OpenCV**: `sudo apt install libopencv-dev` should do it.
@@ -230,6 +234,37 @@ There's several parameters you can tune. To view the full list:
 ```bash
 ./opensplat --help
 ```
+
+On Linux a full manual page is installed with the binary (see [Build](#build)):
+
+```bash
+man opensplat
+```
+
+### Resource-aware options
+
+OpenSplat detects your host RAM, GPU VRAM and CPU at startup and resolves a
+**process contract** — it picks the host image store, a VRAM-bounded cap on the
+gaussian count, and (if needed) an image downscale, then prints the chosen
+policy. You can override any decision; precedence is
+**CLI flag › `OPENSPLAT_*` env var › `--contract` JSON › `--profile` › auto-detect**.
+
+```bash
+# Fit a low-RAM machine and bound VRAM, write a compressed splat:
+./opensplat /path/to/scene --profile 4gb --max-splats 1000000 -o out.splat
+```
+
+| Option | Purpose |
+|---|---|
+| `--profile auto\|2gb\|4gb\|6gb\|8gb\|full-throttle` | RAM budget preset (`auto` sizes from the machine) |
+| `--max-splats N` | Hard cap on gaussian count to bound VRAM (`0` = unbounded) |
+| `--image-store auto\|f32\|u8` | Host image store; `u8` uses ~4× less RAM, bit-identical to `f32` |
+| `--ram-budget-mb` / `--vram-budget-mb` | Explicit budgets in MB |
+| `--min-render-px` | Warn before over-downscaling destabilizes training (default 400) |
+| `--contract file.json` | Pin a full policy from a file |
+
+See `man opensplat` for the complete list, the JSON contract schema, and the
+`OPENSPLAT_*` environment variables.
 
 ### Google Colab
 

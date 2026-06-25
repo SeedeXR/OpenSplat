@@ -37,10 +37,14 @@ struct Camera{
     bool hasDistortionParameters();
     std::vector<float> undistortionParameters();
     torch::Tensor getImage(int downscaleFactor);
+    // Returns the (downscaled) GT image as float32 directly on `device`. Cheaper
+    // than getImage(d).to(device) when the host store is uint8 (see .cpp).
+    torch::Tensor getImageToDevice(int downscaleFactor, const torch::Device &device);
 
-    void loadImage(float downscaleFactor);
+    void loadImage(float downscaleFactor, bool storeU8 = false);
     torch::Tensor K;
     torch::Tensor image;
+    bool storedU8 = false; // when true, `image` is uint8 HWC [0,255]; getImage() converts to float
 
     std::unordered_map<int, torch::Tensor> imagePyramids;
 };

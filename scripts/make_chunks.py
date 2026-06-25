@@ -46,9 +46,18 @@ def make_chunk(scene: Path, sparse: Path, images_dir: Path, n: int, out_root: Pa
     keep_ids = {iid for iid, _ in ordered[:n]}
     keep_names = [img.name for iid, img in ordered[:n]]
 
-    for iid, _ in ordered:
-        if iid not in keep_ids:
+    # pycolmap >=4 dropped Reconstruction.deregister_image in favor of the
+    # frames API (images belong to frames). Support both so this works across
+    # versions; for these single-camera datasets a frame maps 1:1 to an image.
+    for iid, img in ordered:
+        if iid in keep_ids:
+            continue
+        if hasattr(rec, "deregister_image"):
             rec.deregister_image(iid)
+        else:
+            fid = img.frame_id
+            if rec.exists_frame(fid):
+                rec.deregister_frame(fid)
 
     dst = out_root / f"{scene.name}_{n}"
     (dst / "sparse" / "0").mkdir(parents=True, exist_ok=True)
