@@ -45,9 +45,11 @@ OpenSplat/
 │   ├── io/                 #   Dataset / SfM loaders & point-cloud IO.
 │   ├── model/              #   Gaussian model & training components.
 │   ├── render/             #   Projection & rasterization glue + losses.
-│   └── common/             #   Shared math & utility helpers.
+│   └── common/             #   Shared helpers: cv_utils, tensor_math, utils, constants,
+│                           #     resource.{hpp,cpp} (resource-aware process contract).
+├── man/                    # opensplat.1.in — man page template (@OPENSPLAT_MAN_VERSION@).
 ├── test/                   # Test suite (unit/ integration/ regression/). Build: -DOPENSPLAT_BUILD_TESTS=ON.
-├── scripts/                # build · fetch_test_data · make_chunks · smoke · benchmark · docker-build.
+├── scripts/                # build · fetch_test_data · make_chunks · smoke · benchmark · bench_resource · docker-build.
 ├── docs/                   # System documentation (dev & user) — this folder.
 ├── memory/                 # Agent operating framework + working state.  ── git-ignored ──
 │   ├── operating/          #   Living agent docs (governance, session_start, todo, process_contract, …).
@@ -72,7 +74,7 @@ OpenSplat/
 | `src/io` | `input_data.*`, `colmap.*`, `nerfstudio.*`, `opensfm.*`, `openmvg.*`, `point_io.*` | Read datasets (COLMAP/Nerfstudio/OpenSfM/OpenMVG) + point clouds → `InputData`. |
 | `src/model` | `model.*`, `spherical_harmonics.*`, `optim_scheduler.*`, `kdtree_tensor.*` | Gaussian model, SH color, optimizer scheduling, KD-tree. |
 | `src/render` | `project_gaussians.*`, `rasterize_gaussians.*`, `ssim.*`, `gsplat.hpp`, `tile_bounds.hpp` | Project/rasterize Gaussians, SSIM loss; `gsplat.hpp` selects the backend. |
-| `src/common` | `cv_utils.*`, `utils.*`, `tensor_math.*`, `constants.hpp` | OpenCV helpers, utilities, tensor math, constants. |
+| `src/common` | `cv_utils.*`, `utils.*`, `tensor_math.*`, `constants.hpp`, `resource.*` | OpenCV helpers, utilities, tensor math, constants, and the resource-aware **process contract** (`resource.hpp/.cpp` — host detection + RAM/VRAM/Gaussian-budget policy; cross-platform Linux+macOS). |
 
 ## How the build resolves includes after the move
 

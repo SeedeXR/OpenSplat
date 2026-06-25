@@ -1,0 +1,37 @@
+# OpenSplat
+
+> Free, open-source implementation of 3D Gaussian Splatting in C++ (LibTorch), focused on being
+> portable, lean, and fast. It turns posed images + a sparse point cloud (COLMAP / OpenSfM / ODM /
+> OpenMVG / Nerfstudio) into a `.ply`/`.splat` scene. Runs on CPU, NVIDIA (CUDA), AMD (HIP/ROCm),
+> and Apple Silicon (Metal/MPS).
+
+Build it (CMake + LibTorch + OpenCV); run `opensplat <project> -n <iters> -o scene.ply`. A
+resource-aware "process contract" auto-detects host RAM/CPU/VRAM and picks a safe policy, tunable
+via CLI flags, `OPENSPLAT_*` env vars, a JSON contract file, or a profile preset.
+
+## Documentation
+- [Getting started (build & run)](docs/getting_started.md): prerequisites, per-backend build, first run.
+- [Architecture](docs/architecture.md): modules, data flow, backend selection (Mermaid diagrams).
+- [Repository organization](docs/repo_organization.md): where code lives and why.
+- [Testing](docs/testing.md): how to build/run the test suite and benchmarks.
+- [Design / CLI & viewer UX](docs/design.md).
+- [Project context](docs/project_context.md): vision, targets, constraints.
+- [README](README.md): canonical install/usage and the Docker build matrix.
+
+## Source layout (`src/`)
+- [src/app](src/app): CLI entry points (`opensplat`, `simple_trainer`, optional `visualizer`).
+- [src/io](src/io): dataset/SfM loaders (COLMAP, Nerfstudio, OpenSfM, OpenMVG) + point-cloud IO.
+- [src/model](src/model): gaussian model, spherical harmonics, optimizer scheduling, KD-tree.
+- [src/render](src/render): projection, rasterization, SSIM; `gsplat.hpp` selects the backend.
+- [src/common](src/common): cv/math/utility helpers + the resource-aware process contract (`resource.hpp`).
+- [rasterizer](rasterizer): CPU / CUDA-HIP / Metal rasterizer backends.
+
+## Usage
+- Flags: run `opensplat --help`, or see the man page `man/opensplat.1.in`.
+- Resource contract: `--profile {2gb,4gb,6gb,8gb,full-throttle}`, `--max-splats N`,
+  `--image-store {auto,f32,u8}`, `--ram-budget-mb`, `--vram-budget-mb`, `--contract FILE.json`.
+
+## Optional
+- [Tests](test): doctest unit/regression/integration suites (`-DOPENSPLAT_BUILD_TESTS=ON`).
+- [Scripts](scripts): `build.sh`, `fetch_test_data.sh`, `make_chunks.py`, `smoke.sh`, `benchmark.sh`.
+- [License: AGPLv3](LICENSE.txt).

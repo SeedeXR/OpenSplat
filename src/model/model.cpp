@@ -346,10 +346,21 @@ void Model::afterTrain(int step){
     if (step % refineEvery == 0 && step > warmupLength){
         int resetInterval = resetAlphaEvery * refineEvery;
         bool doDensification = step < stopSplitAt && step % resetInterval > numCameras + refineEvery;
+        // Resource-aware SOFT cap (process contract / --max-splats): stop GROWING
+        // gaussians once the count reaches the cap, but keep culling so it can still
+        // shrink. The refine step that crosses the cap still runs a full densification
+        // batch, so the final count may overshoot the cap by up to one batch (bounded,
+        // non-compounding). 0 => unbounded.
+        const bool atCap = (maxGaussians > 0 && means.size(0) >= maxGaussians);
         torch::Tensor splitsMask;
         const float cullAlphaThresh = 0.1f;
 
-        if (doDensification){
+        if (doDensification && atCap && !gaussianCapWarned){
+            std::cout << "Gaussian cap reached (" << maxGaussians << "); densification growth paused" << std::endl;
+            gaussianCapWarned = true;
+        }
+
+        if (doDensification && !atCap){
             int numPointsBefore = means.size(0);
             torch::Tensor avgGradNorm = (xysGradNorm / visCounts) * 0.5f * static_cast<float>( (std::max)(lastWidth, lastHeight) );
             torch::Tensor highGrads = (avgGradNorm > densifyGradThresh).squeeze();

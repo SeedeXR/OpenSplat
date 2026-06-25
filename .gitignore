@@ -22,3 +22,15 @@ datasets/
 
 # Python cache
 __pycache__/
+
+# Linux/CUDA optimization research — local only
+linux_research/
+
+# stray run artifacts (root)
+/splat.ply
+/cameras.json
+/build_*.log
+
+# fast-math A/B build (local benchmark artifact)
+build_fm/
+output_fm/

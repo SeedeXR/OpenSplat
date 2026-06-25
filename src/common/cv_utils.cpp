@@ -48,3 +48,9 @@ torch::Tensor imageToTensor(const cv::Mat &image){
     return (img.toType(torch::kFloat32) / 255.0f);
 }
 
+torch::Tensor imageToU8Tensor(const cv::Mat &image){
+    // from_blob does not own cv::Mat's buffer, so clone into an owning uint8 tensor.
+    torch::Tensor img = torch::from_blob(image.data, { image.rows, image.cols, image.dims + 1 }, torch::kU8);
+    return img.clone();
+}
+

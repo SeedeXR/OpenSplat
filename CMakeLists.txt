@@ -279,7 +279,7 @@ set(OPENSPLAT_INCLUDE_DIRS
 set(OPENSPLAT_SRC_FILES src/app/opensplat.cpp src/io/point_io.cpp src/io/nerfstudio.cpp src/model/model.cpp
 src/model/kdtree_tensor.cpp src/model/spherical_harmonics.cpp src/common/cv_utils.cpp src/common/utils.cpp src/render/project_gaussians.cpp
 src/render/rasterize_gaussians.cpp src/render/ssim.cpp src/model/optim_scheduler.cpp src/io/colmap.cpp src/io/opensfm.cpp src/io/openmvg.cpp src/io/input_data.cpp
-src/common/tensor_math.cpp)
+src/common/tensor_math.cpp src/common/resource.cpp)
 
 if (OPENSPLAT_BUILD_VISUALIZER)
     if (Pangolin_FOUND)
@@ -362,6 +362,40 @@ if (MSVC)
 endif (MSVC)
 
 add_compile_definitions(GLOG_USE_GLOG_EXPORT)
+
+# ---- man page ---------------------------------------------------------------
+# Generate + install opensplat(1). Defaults ON on Linux (man pages are the
+# native CLI docs there); the source is man/opensplat.1.in with the version
+# substituted at configure time and gzipped during the build.
+include(GNUInstallDirs)
+if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+    set(_OPENSPLAT_MAN_DEFAULT ON)
+else()
+    set(_OPENSPLAT_MAN_DEFAULT OFF)
+endif()
+option(OPENSPLAT_BUILD_MANPAGE "Generate and install the opensplat(1) man page" ${_OPENSPLAT_MAN_DEFAULT})
+if(OPENSPLAT_BUILD_MANPAGE AND NOT WIN32)
+    string(STRIP "${APP_VERSION}" OPENSPLAT_MAN_VERSION)
+    configure_file(${CMAKE_SOURCE_DIR}/man/opensplat.1.in
+                   ${CMAKE_BINARY_DIR}/opensplat.1 @ONLY)
+    find_program(GZIP_TOOL gzip)
+    if(GZIP_TOOL)
+        # gzip -k keeps the configured .1 and writes opensplat.1.gz beside it
+        # (no shell redirection -> portable across the Make/Ninja generators).
+        add_custom_command(
+            OUTPUT ${CMAKE_BINARY_DIR}/opensplat.1.gz
+            COMMAND ${GZIP_TOOL} -9 -n -k -f ${CMAKE_BINARY_DIR}/opensplat.1
+            DEPENDS ${CMAKE_BINARY_DIR}/opensplat.1
+            COMMENT "Generating man page opensplat.1.gz"
+            VERBATIM)
+        add_custom_target(opensplat_manpage ALL DEPENDS ${CMAKE_BINARY_DIR}/opensplat.1.gz)
+        install(FILES ${CMAKE_BINARY_DIR}/opensplat.1.gz DESTINATION ${CMAKE_INSTALL_MANDIR}/man1)
+    else()
+        message(STATUS "gzip not found; installing the uncompressed man page")
+        install(FILES ${CMAKE_BINARY_DIR}/opensplat.1 DESTINATION ${CMAKE_INSTALL_MANDIR}/man1)
+    endif()
+    message(STATUS "Man page opensplat(1) enabled -> ${CMAKE_INSTALL_MANDIR}/man1 (OPENSPLAT_BUILD_MANPAGE=ON)")
+endif()
 
 if(OPENSPLAT_BUILD_TESTS)
     enable_testing()

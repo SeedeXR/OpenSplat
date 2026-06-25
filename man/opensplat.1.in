@@ -1,0 +1,318 @@
+.\" Manpage for opensplat. Generated from man/opensplat.1.in by CMake
+.\" (version substituted at configure time). Edit the .in, not the build output.
+.TH OPENSPLAT 1 "June 2026" "OpenSplat @OPENSPLAT_MAN_VERSION@" "User Commands"
+.SH NAME
+opensplat \- generate a 3D Gaussian Splatting scene from a photogrammetry project
+.SH SYNOPSIS
+.B opensplat
+.RI [ project-path ]
+.RI [ options ]
+.SH DESCRIPTION
+.B opensplat
+takes camera poses and sparse points from a
+.BR COLMAP ,
+.BR OpenSfM ,
+.BR ODM ,
+.B OpenMVG
+or
+.B nerfstudio
+project and trains a 3D Gaussian Splatting model, writing a
+.B .ply
+or
+.B .splat
+scene file (plus a
+.B cameras.json
+alongside it).
+.PP
+The
+.I project-path
+must contain sparse points; random initialization is not supported. The
+project format is auto-detected from its layout (e.g. a
+.B sparse/
+directory or
+.B cameras.bin
+for COLMAP, a
+.B transforms.json
+for nerfstudio).
+.PP
+On NVIDIA (CUDA), AMD (HIP/ROCm) and Apple (Metal) GPUs training runs on the
+GPU; otherwise it falls back to the CPU (roughly 100x slower). The backend in
+use is printed at startup ("Using CUDA" / "Using MPS" / "Using CPU").
+.SH RESOURCE-AWARE PROCESS CONTRACT
+On startup
+.B opensplat
+detects host RAM, GPU VRAM, CPU cores and the scene size, then resolves a
+.I process contract
+\(em a policy that selects the host image store, a hard cap on the gaussian
+count (to bound VRAM), and, if necessary, an image downscale. The resolved
+contract is printed before training. Every decision can be overridden; the
+precedence, highest first, is:
+.IP 1. 4
+Command-line flags (e.g.
+.BR --max-splats ).
+.IP 2. 4
+Environment variables (the
+.B OPENSPLAT_*
+variables; see
+.BR ENVIRONMENT ).
+.IP 3. 4
+A JSON contract file given with
+.BR --contract .
+.IP 4. 4
+A named profile given with
+.BR --profile .
+.IP 5. 4
+Auto-detection from the detected hardware.
+.PP
+The named profiles are
+.BR 2gb ", " 4gb ", " 6gb ", " 8gb " (set the host RAM budget in GiB) and "
+.B full-throttle
+(remove all caps, keep the fastest paths). Use
+.B auto
+(the default) to size everything from the detected machine.
+.SH OPTIONS
+.SS Input / output
+.TP
+.BI \-i ", " \-\-input " path"
+Path to the project (also accepted as the first positional argument).
+.TP
+.BI \-o ", " \-\-output " path"
+Output scene file. A
+.B .ply
+or
+.B .splat
+extension selects the format. Default:
+.BR splat.ply .
+.TP
+.BI \-s ", " \-\-save\-every " n"
+Save the scene every
+.I n
+steps. \-1 disables intermediate saves. Default: \-1.
+.TP
+.BI \-\-resume " file.ply"
+Resume training from a previously saved PLY.
+.TP
+.BI \-\-colmap\-image\-path " path"
+Override the default image directory for COLMAP input.
+.SS Validation
+.TP
+.B \-\-val
+Withhold one camera and report its loss after training.
+.TP
+.BI \-\-val\-image " name"
+Filename of the image to withhold. Default:
+.BR random .
+.TP
+.BI \-\-val\-render " dir"
+Render the validation view every 10 steps into
+.IR dir .
+.TP
+.B \-\-keep\-crs
+Retain the input project's coordinate reference system in the output.
+.SS Compute backend
+.TP
+.B \-\-cpu
+Force CPU execution even if a GPU is available.
+.SS Resource contract (override the auto-detected policy)
+.TP
+.BI \-\-profile " name"
+Resource profile:
+.BR auto ", " 2gb ", " 4gb ", " 6gb ", " 8gb " or " full\-throttle .
+Default:
+.BR auto .
+.TP
+.BI \-\-contract " file.json"
+Path to a JSON contract file (see
+.BR "CONTRACT FILE" ).
+.TP
+.BI \-\-ram\-budget\-mb " mb"
+Host RAM budget in MB. 0 = auto-detect.
+.TP
+.BI \-\-vram\-budget\-mb " mb"
+GPU VRAM budget in MB. 0 = auto-detect.
+.TP
+.BI \-\-max\-splats " n"
+Hard cap on the gaussian count to bound VRAM. 0 = unbounded. When auto, the cap
+is derived from the VRAM budget (roughly 2000 bytes per gaussian, with 15%
+headroom). Growth pauses at the first refinement past the cap; culling
+continues.
+.TP
+.BI \-\-image\-store " mode"
+Host image store:
+.BR auto ", " f32 " or " u8 .
+The
+.B u8
+store uses ~4x less host RAM and is bit-identical to
+.B f32
+(source images are 8-bit), at a small per-iteration conversion cost. Default:
+.B auto
+(picks
+.B u8
+when
+.B f32
+would not fit the RAM budget).
+.TP
+.BI \-\-min\-render\-px " px"
+Warn if the rendered image's long side falls below
+.I px
+(a quality guard \(em over-downscaling small images destabilizes training).
+Default: 400.
+.SS Training schedule
+.TP
+.BI \-n ", " \-\-num\-iters " n"
+Number of training iterations. Default: 30000.
+.TP
+.BI \-d ", " \-\-downscale\-factor " f"
+Scale input images down by this factor before training. Default: 1.
+.TP
+.BI \-\-num\-downscales " n"
+Number of progressive downscales; resolution doubles every
+.B \-\-resolution\-schedule
+steps. Default: 2.
+.TP
+.BI \-\-resolution\-schedule " n"
+Double the working resolution every
+.I n
+steps. Default: 3000.
+.TP
+.BI \-\-sh\-degree " n"
+Maximum spherical-harmonics degree (view-dependent color). Lower degrees use
+less memory. Default: 3.
+.TP
+.BI \-\-sh\-degree\-interval " n"
+Raise the active SH degree every
+.I n
+steps, up to
+.BR \-\-sh\-degree .
+Default: 1000.
+.TP
+.BI \-\-ssim\-weight " w"
+Weight of the SSIM term in the loss (0 = L1 only). Default: 0.2.
+.SS Densification
+.TP
+.BI \-\-refine\-every " n"
+Split / duplicate / prune gaussians every
+.I n
+steps. Default: 100.
+.TP
+.BI \-\-warmup\-length " n"
+Begin refinement only after
+.I n
+steps. Default: 500.
+.TP
+.BI \-\-reset\-alpha\-every " n"
+Reset gaussian opacities every
+.I n
+refinements. Default: 30.
+.TP
+.BI \-\-densify\-grad\-thresh " x"
+Positional-gradient threshold above which a gaussian is split/duplicated.
+Default: 0.0002.
+.TP
+.BI \-\-densify\-size\-thresh " x"
+Gaussians smaller than this are duplicated; larger ones are split. Default: 0.01.
+.TP
+.BI \-\-stop\-screen\-size\-at " n"
+Stop splitting on screen-space size after
+.I n
+steps. Default: 4000.
+.TP
+.BI \-\-split\-screen\-size " x"
+Split gaussians larger than this fraction of the screen. Default: 0.05.
+.SS Information
+.TP
+.BR \-h ", " \-\-help
+Print usage and exit.
+.TP
+.B \-\-version
+Print the version and exit.
+.SH CONTRACT FILE
+The file given to
+.B \-\-contract
+is JSON. Any subset of these keys may be set; unset keys fall through to the
+profile / auto-detection:
+.PP
+.nf
+.RS
+{
+  "profile":          "4gb",
+  "ram_budget_mb":    4096,
+  "vram_budget_mb":   4096,
+  "max_gaussians":    1500000,
+  "image_store":      "u8",
+  "min_render_px":    400,
+  "downscale_factor": 2
+}
+.RE
+.fi
+.SH ENVIRONMENT
+These override the JSON contract and the profile, but not command-line flags:
+.TP
+.B OPENSPLAT_PROFILE
+Same values as
+.BR \-\-profile .
+.TP
+.B OPENSPLAT_RAM_BUDGET_MB
+Host RAM budget in MB.
+.TP
+.B OPENSPLAT_VRAM_BUDGET_MB
+GPU VRAM budget in MB.
+.TP
+.B OPENSPLAT_MAX_SPLATS
+Hard gaussian cap.
+.TP
+.B OPENSPLAT_IMAGE_STORE
+.BR auto ", " f32 " or " u8 .
+.TP
+.B OPENSPLAT_MIN_RENDER_PX
+Minimum render long-side guard.
+.TP
+.B OPENSPLAT_DOWNSCALE_FACTOR
+Image downscale factor.
+.TP
+.B OPENSPLAT_CONTRACT
+Path to a JSON contract file (same as
+.BR \-\-contract ).
+.SH EXAMPLES
+Train a scene with default settings:
+.PP
+.RS
+.B opensplat /path/to/banana \-n 2000
+.RE
+.PP
+Train on a low-RAM machine, capping VRAM, writing a compressed splat:
+.PP
+.RS
+.B opensplat /path/to/scene \-\-profile 4gb \-\-max\-splats 1000000 \-o out.splat
+.RE
+.PP
+Force the uint8 image store and a quality floor via environment:
+.PP
+.RS
+.B OPENSPLAT_IMAGE_STORE=u8 OPENSPLAT_MIN_RENDER_PX=500 opensplat /path/to/scene
+.RE
+.PP
+Pin a full policy from a file:
+.PP
+.RS
+.B opensplat /path/to/scene \-\-contract contract.json
+.RE
+.SH EXIT STATUS
+.B opensplat
+exits 0 on success and non-zero on error (invalid arguments, an unreadable
+project, or a training failure such as an out-of-memory condition).
+.SH FILES
+.TP
+.I splat.ply
+Default output scene (overridable with
+.BR \-o ).
+.TP
+.I cameras.json
+Camera set, written next to the output scene.
+.SH SEE ALSO
+Project documentation under
+.IR docs/ ,
+and the README. Online: <https://github.com/pierotofy/OpenSplat>.
+.SH AUTHORS
+OpenSplat is free software licensed under the AGPLv3. The methods are based on
+nerfstudio's splatfacto.

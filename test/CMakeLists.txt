@@ -58,10 +58,16 @@ add_opensplat_test(test_kdtree           SOURCES unit/test_kdtree.cpp          $
 # main target; kept identical so the tests don't diverge from how the app links OpenCV.)
 add_opensplat_test(test_cv_utils         SOURCES unit/test_cv_utils.cpp        ${SRC}/common/cv_utils.cpp
                                          LIBS ${OpenCV_LIBS})
+# Resource-aware process contract: pure resolvePolicy() + JSON/env parsing (no Torch).
+add_opensplat_test(test_resource         NO_TORCH SOURCES unit/test_resource.cpp ${SRC}/common/resource.cpp
+                                         LIBS nlohmann_json::nlohmann_json)
 
 # --- Regression / characterization -----------------------------------------
 add_opensplat_test(test_regression_math  SOURCES regression/test_regression_math.cpp
                                          ${SRC}/common/tensor_math.cpp ${SRC}/model/optim_scheduler.cpp)
+add_opensplat_test(test_regression_resource NO_TORCH SOURCES regression/test_regression_resource.cpp
+                                         ${SRC}/common/resource.cpp
+                                         LIBS nlohmann_json::nlohmann_json)
 
 # --- Integration (full pipeline on the CPU backend) -------------------------
 # CORE_SRC is derived from the parent's OPENSPLAT_SRC_FILES (single source of truth), minus the
@@ -79,6 +85,20 @@ add_opensplat_test(test_integration HEAVY
     SOURCES integration/test_pipeline.cpp ${CORE_SRC}
     LIBS gsplat_cpu ${OpenCV_LIBS} nlohmann_json::nlohmann_json nanoflann::nanoflann ${STDPPFS_LIBRARY}
     WORKING_DIR ${CMAKE_SOURCE_DIR})
+
+# CUDA integration test — only in a CUDA build. Recompiles CORE_SRC with USE_CUDA
+# and links the CUDA `gsplat` library so it exercises the real GPU kernels. Skips
+# at runtime if no CUDA device is present (so it is safe on GPU-less CI runners).
+if(GPU_RUNTIME STREQUAL "CUDA")
+    # CORE_SRC's project/rasterize/SH .cpp files reference BOTH the CPU and the CUDA
+    # rasterizer symbols (apply() branches on device), so link gsplat AND gsplat_cpu.
+    add_opensplat_test(test_integration_cuda HEAVY
+        SOURCES integration/test_pipeline_cuda.cpp ${CORE_SRC}
+        LIBS gsplat gsplat_cpu ${GPU_LIBRARIES} ${OpenCV_LIBS} nlohmann_json::nlohmann_json nanoflann::nanoflann ${STDPPFS_LIBRARY}
+        WORKING_DIR ${CMAKE_SOURCE_DIR})
+    target_compile_definitions(test_integration_cuda PRIVATE USE_CUDA)
+    target_include_directories(test_integration_cuda PRIVATE ${CMAKE_CUDA_TOOLKIT_INCLUDE_DIRECTORIES})
+endif()
 
 # Aggregate build targets so CI never hand-lists individual test names:
 #   opensplat_unit_tests  — all suites except HEAVY (fast; what macOS CI builds)

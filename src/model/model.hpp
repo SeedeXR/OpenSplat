@@ -24,11 +24,12 @@ struct Model{
         int numDownscales, int resolutionSchedule, int shDegree, int shDegreeInterval, 
         int refineEvery, int warmupLength, int resetAlphaEvery, float densifyGradThresh, float densifySizeThresh, int stopScreenSizeAt, float splitScreenSize,
         int maxSteps, bool keepCrs,
-        const torch::Device &device) :
+        const torch::Device &device,
+        long long maxGaussians = 0) :
     numCameras(numCameras),
-    numDownscales(numDownscales), resolutionSchedule(resolutionSchedule), shDegree(shDegree), shDegreeInterval(shDegreeInterval), 
+    numDownscales(numDownscales), resolutionSchedule(resolutionSchedule), shDegree(shDegree), shDegreeInterval(shDegreeInterval),
     refineEvery(refineEvery), warmupLength(warmupLength), resetAlphaEvery(resetAlphaEvery), stopSplitAt(maxSteps / 2), densifyGradThresh(densifyGradThresh), densifySizeThresh(densifySizeThresh), stopScreenSizeAt(stopScreenSizeAt), splitScreenSize(splitScreenSize),
-    maxSteps(maxSteps), keepCrs(keepCrs),
+    maxSteps(maxSteps), keepCrs(keepCrs), maxGaussians(maxGaussians),
     device(device), ssim(11, 3){
 
     long long numPoints = inputData.points.xyz.size(0);
@@ -123,6 +124,8 @@ struct Model{
   float splitScreenSize;
   int maxSteps;
   bool keepCrs;
+  long long maxGaussians; // 0 => unbounded; hard cap on densified gaussian count (VRAM budget)
+  bool gaussianCapWarned = false; // one-shot "cap reached" notice (per Model instance)
 
   float scale;
   torch::Tensor translation;

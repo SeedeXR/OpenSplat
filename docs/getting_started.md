@@ -54,6 +54,10 @@ scripts/build.sh --libtorch /path/to/libtorch --backend MPS   # or CPU / CUDA / 
 Useful options: `-DOPENSPLAT_BUILD_SIMPLE_TRAINER=ON`, `-DOPENSPLAT_BUILD_VISUALIZER=ON`,
 `-DOPENSPLAT_USE_FAST_MATH=ON`. macOS/Windows/Docker specifics: see [`../README.md`](https://github.com/SeedeXR/OpenSplat/blob/main/README.md).
 
+On **Linux** the build also generates the `opensplat(1)` man page (`build/opensplat.1.gz`);
+`sudo make install` (or `cmake --install build`) places it on the `man` path so `man opensplat`
+works. Disable with `-DOPENSPLAT_BUILD_MANPAGE=OFF`.
+
 ## Get a dataset
 
 ```bash
@@ -69,11 +73,27 @@ points (random init is unsupported).
 ```bash
 output/opensplat data/db/drjohnson -n 2000 -o splat_output/drjohnson.ply
 output/opensplat --help                    # full option list
+man opensplat                              # full manual (installed on Linux)
 ```
 
 Output: a `.ply`/`.splat` + `cameras.json` (written next to the `-o` path), droppable into a
 [splat viewer](https://github.com/MrNeRF/awesome-3D-gaussian-splatting#viewers). Resume with
 `--resume splat_output/drjohnson.ply`.
+
+### Resource-aware run
+
+OpenSplat sizes itself to the host: at startup it detects RAM/VRAM/CPU and prints a
+**process contract** choosing the host image store, a VRAM-bounded gaussian cap, and any
+downscale. Override with (precedence high→low) a CLI flag, an `OPENSPLAT_*` env var, a
+`--contract file.json`, or a `--profile` preset:
+
+```bash
+output/opensplat data/db/drjohnson --profile 4gb --max-splats 1000000   # fit a 4 GB box, bound VRAM
+output/opensplat data/db/drjohnson --image-store u8                     # ~4x less host RAM, bit-identical
+```
+
+`man opensplat` documents every flag, the JSON contract schema, and the `OPENSPLAT_*`
+variables.
 
 ## Verify it works
 
