@@ -18,3 +18,7 @@ data/
 
 # Agent working memory — local only, not pushed (see memory/README.md)
 memory/
+datasets/
+
+# Python cache
+__pycache__/

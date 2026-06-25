@@ -322,18 +322,25 @@ void Model::afterTrain(int step){
             xysGradNorm = grads;
             visCounts = torch::ones_like(xysGradNorm);
         }else{
-            visCounts.index_put_({visibleMask}, visCounts.index({visibleMask}) + 1);
-            xysGradNorm.index_put_({visibleMask}, grads.index({visibleMask}) + xysGradNorm.index({visibleMask}));
+            // Elementwise equivalents of the masked accumulations. The original boolean-mask
+            // index/index_put_ lower to nonzero() + a blocking GPU->CPU readback on the MPS
+            // backend, which the profiler showed dominates the per-step cost (see
+            // memory/findings/finding-mps-aftertrain-sync.md). These produce identical values:
+            //   visCounts[mask] += 1            == visCounts += mask
+            //   xysGradNorm[mask] += grads[mask] == xysGradNorm += grads * mask
+            torch::Tensor visf = visibleMask.to(xysGradNorm.dtype());
+            visCounts += visf;
+            xysGradNorm += grads * visf;
         }
 
         if (!max2DSize.numel()){
             max2DSize = torch::zeros_like(radii, torch::kFloat32);
         }
 
-        torch::Tensor newRadii = radii.detach().index({visibleMask});
-        max2DSize.index_put_({visibleMask}, torch::maximum(
-                max2DSize.index({visibleMask}), newRadii / static_cast<float>( (std::max)(lastHeight, lastWidth) )
-            ));
+        // max2DSize[mask] = max(max2DSize[mask], radii[mask]/s)  ==  where(radii>0, max(...), keep)
+        max2DSize = torch::where(radii > 0,
+            torch::maximum(max2DSize, radii.detach() / static_cast<float>( (std::max)(lastHeight, lastWidth) )),
+            max2DSize);
     }
 
     if (step % refineEvery == 0 && step > warmupLength){

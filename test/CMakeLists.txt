@@ -5,6 +5,9 @@
 # Run:  ctest --test-dir <build-dir> --output-on-failure
 
 include(FetchContent)
+# doctest v2.4.11 declares cmake_minimum_required(VERSION 3.0); CMake >= 4.0 rejects minimums
+# below 3.5, so allow it (the documented escape hatch). Harmless on older CMake.
+set(CMAKE_POLICY_VERSION_MINIMUM 3.5)
 FetchContent_Declare(doctest
     URL https://github.com/doctest/doctest/archive/refs/tags/v2.4.11.zip
 )

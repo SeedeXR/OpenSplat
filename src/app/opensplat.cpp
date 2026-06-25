@@ -199,6 +199,16 @@ int main(int argc, char *argv[]){
         model.save(outputScene, numIters);
         // model.saveDebugPly("debug.ply", numIters);
 
+        // Diagnostic: real MPS allocator memory vs OS phys_footprint (they differ — see
+        // memory/findings/finding-memory-footprint.md). current = live tensors; driver = total
+        // the Metal driver has reserved (the figure that pressures the 16 GB ceiling).
+        if (device == torch::kMPS){
+            const auto &mps = at::detail::getMPSHooks();
+            std::cout << "MPS memory: current allocated "
+                      << mps.getCurrentAllocatedMemory() / (1024 * 1024) << " MB, driver allocated "
+                      << mps.getDriverAllocatedMemory() / (1024 * 1024) << " MB" << std::endl;
+        }
+
         // Validate
         if (valCam != nullptr){
             torch::Tensor rgb = model.forward(*valCam, numIters);

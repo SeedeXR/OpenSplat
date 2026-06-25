@@ -25,7 +25,7 @@ flowchart TD
     ROOT --> GEN["output/ · splat_output/ · data/ (git-ignored, generated)"]
     ROOT --> CM["CMakeLists.txt · VERSION · README.md · AGENTS.md · Dockerfile*"]
     SRC --> APP["app/"] & IO["io/"] & MODEL["model/"] & RENDER["render/"] & COMMON["common/"]
-    MEM --> OP["operating/"] & CORE["core-mind/"] & CHK["checkpoints/ findings/ profiles/"]
+    MEM --> OP["operating/"] & CHK["checkpoints/ findings/ profiles/"]
 ```
 
 ```
@@ -50,8 +50,7 @@ OpenSplat/
 ├── scripts/                # build · fetch_test_data · make_chunks · smoke · benchmark · docker-build.
 ├── docs/                   # System documentation (dev & user) — this folder.
 ├── memory/                 # Agent operating framework + working state.  ── git-ignored ──
-│   ├── operating/          #   Living agent docs (governance, session_start, todo, …).
-│   ├── core-mind/          #   Canonical file charters (definitions).
+│   ├── operating/          #   Living agent docs (governance, session_start, todo, process_contract, …).
 │   ├── agent-registry.yaml #   Ownership & locks.
 │   └── checkpoints/ findings/ profiles/
 │
