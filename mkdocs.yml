@@ -5,8 +5,7 @@ site_url: https://seedexr.github.io/OpenSplat/
 repo_url: https://github.com/SeedeXR/OpenSplat
 repo_name: SeedeXR/OpenSplat
 
-# Build the site from the system docs in docs/. (memory/ is intentionally git-ignored and
-# not published; the agent operating framework is local-only.)
+# Build the site from the system docs in docs/.
 docs_dir: docs
 
 theme:

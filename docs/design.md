@@ -48,6 +48,5 @@ flowchart LR
 ## Evolving this doc
 
 If a graphical/web UI is introduced, expand into a full design system (tokens, components,
-information architecture, responsive behavior) following documentation-first practice
-(`../memory/operating/docs.md`). Until then, keep CLI/visualizer
+information architecture, responsive behavior) following documentation-first practice. Until then, keep CLI/visualizer
 UX consistent and low-friction.

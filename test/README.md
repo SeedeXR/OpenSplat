@@ -30,7 +30,7 @@ ctest --test-dir build -R test_tensor_math         # a single suite
 OPENSPLAT_TEST_DATA=data/db/drjohnson ctest --test-dir build -R test_integration --output-on-failure
 ```
 
-## Levels (see ../memory/operating/test.md for the full methodology)
+## Levels
 
 | Level | What it asserts | Data | Deps |
 | ----- | --------------- | ---- | ---- |
@@ -44,7 +44,7 @@ OPENSPLAT_TEST_DATA=data/db/drjohnson ctest --test-dir build -R test_integration
 - Each test target links only the sources it exercises — keep dependencies minimal.
 - Tests requiring a dataset must **skip gracefully** when `../data/` is absent.
 - Performance/benchmark testing (the 2→64 image ladder) lives in `scripts/benchmark.sh`
-  and writes to `../memory/profiles/`, separate from correctness tests here.
+  and writes to a local `profiles/` dir, separate from correctness tests here.
 
 > Status: unit suites cover the leaf math/IO/utility modules (`tensor_math`, `ssim`,
 > `optim_scheduler`, `kdtree_tensor`, `cv_utils`, `utils`), plus regression characterization
@@ -52,4 +52,4 @@ OPENSPLAT_TEST_DATA=data/db/drjohnson ctest --test-dir build -R test_integration
 > the 16 GB dev machine** (needs LibTorch+OpenCV) — CI / first run is the authoritative check.
 > Modules tied to the GPU backends (`model`, `project_gaussians`, `rasterize_gaussians`,
 > `spherical_harmonics`) are exercised via the integration pipeline; dedicated unit tests for
-> them are tracked in `../memory/operating/todo.md` (Phase 2).
+> them are tracked for a future phase.

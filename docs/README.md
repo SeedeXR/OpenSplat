@@ -1,8 +1,8 @@
 # OpenSplat — System Documentation
 
 **Dev & user documentation for OpenSplat**: what it is, how the pieces fit together, and how to
-build, run, and test it. This is *system* documentation — for how agents/contributors *work on*
-the project (governance, session ritual, methodology), see `../memory/`.
+build, run, and test it. This is *system* documentation — covering how OpenSplat works and how
+to build, run, and test it.
 
 OpenSplat is a free, open-source C++ implementation of **3D Gaussian Splatting**: it turns posed
 images + a sparse point cloud (COLMAP / OpenSfM / OpenMVG / ODM / Nerfstudio) into a `.ply`/`.splat`
@@ -51,4 +51,3 @@ flowchart TD
 - Code/build snippets are real and runnable; no invented flags (cross-checked against
   `../README.md` and `../CMakeLists.txt`).
 - Dates are absolute (`YYYY-MM-DD`).
-- Documentation standards live in `../memory/operating/docs.md`.

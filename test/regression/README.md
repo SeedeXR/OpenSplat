@@ -9,4 +9,4 @@ When adding a regression test:
 3. Apply the fix; confirm it passes.
 4. Wire the file into `../CMakeLists.txt` and reference the bug in a comment.
 
-See `../../memory/operating/test.md` for the broader methodology.
+See [`../../docs/testing.md`](../../docs/testing.md) for the broader methodology.

@@ -10,7 +10,7 @@ and [`../docs/testing.md`](../docs/testing.md).
 | `fetch_test_data.sh` | Download a COLMAP test scene from the project's Hugging Face dataset into `data/`. |
 | `make_chunks.py` | Build **valid** 2/4/8/16/32/64-image COLMAP sub-scenes (pycolmap) for the benchmark ladder. |
 | `smoke.sh` | End-to-end sanity check: train a few iterations on a dataset and confirm output. |
-| `benchmark.sh` | Run a scene and capture runtime / peak RAM / backend to `memory/profiles/`. |
+| `benchmark.sh` | Run a scene and capture runtime / peak RAM / backend to a local `profiles/` dir. |
 | `docker-build.sh` | Build a Docker image, selecting a root `Dockerfile` variant (CUDA / ROCm*). |
 
 ```bash

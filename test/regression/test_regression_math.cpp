@@ -3,7 +3,7 @@
 // These lock in the CURRENT, verified-by-hand numeric behaviour of stable building blocks so
 // that an unintended change (refactor, dependency bump, convention flip) is caught. If one of
 // these fails, do NOT just update the expected value — confirm the change is intentional first
-// and add a note here referencing why. See ../README.md and ../../memory/operating/test.md.
+// and add a note here referencing why. See ../README.md and ../../docs/testing.md.
 #define DOCTEST_CONFIG_IMPLEMENT_WITH_MAIN
 #include <doctest/doctest.h>
 #include <torch/torch.h>

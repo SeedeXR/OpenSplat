@@ -52,9 +52,8 @@ model; operators on constrained hardware (16 GB unified memory).
 ## Evaluation criteria
 
 - Reconstruction quality never regresses unnoticed.
-- Resource budgets respected (`../memory/operating/agent_governance.md`).
-- Documentation stays in sync with code (`../memory/operating/docs.md`).
+- Resource budgets respected.
+- Documentation stays in sync with code.
 
 > Project goals from the upstream README (more testing on AMD, speed/memory improvements,
-> distributed compute, real-time training viewer, automatic filtering) feed the roadmap in
-> `../memory/operating/todo.md`.
+> distributed compute, real-time training viewer, automatic filtering) feed the roadmap.

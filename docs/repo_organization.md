@@ -8,8 +8,8 @@ layout changes. Last reorg: Phase 1 (2026-06-25).
 1. Group C++ source by **responsibility**, not alphabetically.
 2. Keep the build resilient: bare `#include "x.hpp"` keeps working because every `src/`
    subfolder is on the compiler include path in `../CMakeLists.txt`.
-3. Separate **product code** (`src/`, `rasterizer/`) from **system docs** (`docs/`) and the
-   **agent operating framework** (`memory/`).
+3. Separate **product code** (`src/`, `rasterizer/`) from **system docs** (`docs/`) and
+   **tests** (`test/`).
 
 ## Top-level layout
 
@@ -20,12 +20,10 @@ flowchart TD
     ROOT --> RAST["rasterizer/ — GPU/CPU backends (unchanged)"]
     ROOT --> TST["test/ — unit / integration / regression"]
     ROOT --> DOCS["docs/ — system documentation (dev & user)"]
-    ROOT --> MEM["memory/ — agent framework + state (git-ignored)"]
     ROOT --> SCR["scripts/ — build / fetch-data / chunks / benchmark / docker"]
     ROOT --> GEN["output/ · splat_output/ · data/ (git-ignored, generated)"]
     ROOT --> CM["CMakeLists.txt · VERSION · README.md · AGENTS.md · Dockerfile*"]
     SRC --> APP["app/"] & IO["io/"] & MODEL["model/"] & RENDER["render/"] & COMMON["common/"]
-    MEM --> OP["operating/"] & CHK["checkpoints/ findings/ profiles/"]
 ```
 
 ```
@@ -51,10 +49,6 @@ OpenSplat/
 ├── test/                   # Test suite (unit/ integration/ regression/). Build: -DOPENSPLAT_BUILD_TESTS=ON.
 ├── scripts/                # build · fetch_test_data · make_chunks · smoke · benchmark · bench_resource · docker-build.
 ├── docs/                   # System documentation (dev & user) — this folder.
-├── memory/                 # Agent operating framework + working state.  ── git-ignored ──
-│   ├── operating/          #   Living agent docs (governance, session_start, todo, process_contract, …).
-│   ├── agent-registry.yaml #   Ownership & locks.
-│   └── checkpoints/ findings/ profiles/
 │
 └── (generated, git-ignored)
     ├── output/             # Compiled binaries (when built via scripts/build.sh; raw cmake -> build/).
@@ -62,9 +56,8 @@ OpenSplat/
     └── data/               # Downloaded datasets (scripts/fetch_test_data.sh) + data/chunks/.
 ```
 
-> **Git-ignored** (not pushed): `memory/`, `output/`, `splat_output/`, `data/`, `build/`.
-> `memory/` is the agent's local working brain; the public repo carries code, system docs
-> (`docs/`), tests (`test/`), and helper `scripts/`.
+> **Git-ignored** (not pushed): `output/`, `splat_output/`, `data/`, `build/`.
+> The public repo carries code, system docs (`docs/`), tests (`test/`), and helper `scripts/`.
 
 ## `src/` module map
 
@@ -111,4 +104,4 @@ done
 
 A full compile additionally needs LibTorch + OpenCV; **CI is the authoritative build check**
 (this 16 GB Apple Silicon machine may not build every backend). See
-[`testing.md`](testing.md) and `../memory/operating/agent_governance.md`.
+[`testing.md`](testing.md).

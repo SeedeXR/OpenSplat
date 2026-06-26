@@ -1,13 +1,11 @@
 # Testing & Verifying the System
 
 How to verify an OpenSplat build/change actually works. This is the **developer** view (verify
-the software). The agent/process testing *methodology* lives in
-`../memory/operating/test.md`.
+the software).
 
 > **Current state (honest):** `test/` is a starter scaffold (unit tests for `tensor_math`,
 > off by default). The authoritative checks today are **CI** (`.github/workflows/`, builds
-> across backends) + a **smoke run**. Growing the harness + benchmark baselines is tracked in
-> `../memory/operating/todo.md` (Phase 2).
+> across backends) + a **smoke run**. Growing the harness + benchmark baselines is ongoing.
 
 ## Verification ladder
 
@@ -72,9 +70,8 @@ scripts/make_chunks.py data/db/drjohnson         # -> data/chunks/drjohnson_{2,4
 for d in data/chunks/drjohnson_{2,4,8,16,32,64}; do scripts/benchmark.sh "$d" 2000; done
 ```
 
-`benchmark.sh` writes runtime / peak RAM / backend to `../memory/profiles/`. **Runtime targets:**
+`benchmark.sh` writes runtime / peak RAM / backend to a local `profiles/` dir. **Runtime targets:**
 peak RAM ≤ 8 GB (ideal 4–6 GB), no thermal throttling, quality ≥ baseline, all backends green.
-Full schema & methodology: `../memory/operating/test.md`.
 
 ## What to test when you change…
 

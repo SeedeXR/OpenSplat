@@ -324,8 +324,8 @@ void Model::afterTrain(int step){
         }else{
             // Elementwise equivalents of the masked accumulations. The original boolean-mask
             // index/index_put_ lower to nonzero() + a blocking GPU->CPU readback on the MPS
-            // backend, which the profiler showed dominates the per-step cost (see
-            // memory/findings/finding-mps-aftertrain-sync.md). These produce identical values:
+            // backend, which the profiler showed dominates the per-step cost. The elementwise
+            // form below avoids that sync and produces identical values:
             //   visCounts[mask] += 1            == visCounts += mask
             //   xysGradNorm[mask] += grads[mask] == xysGradNorm += grads * mask
             torch::Tensor visf = visibleMask.to(xysGradNorm.dtype());

@@ -6,6 +6,7 @@ build/
 my_build/
 .idea/
 .vscode/
+.claude/
 
 # Compiled binaries
 output/
@@ -13,10 +14,13 @@ output/
 # Trained splats (.ply / .splat)
 splat_output/
 
+# Benchmark metric captures (local)
+profiles/
+
 # Downloaded test datasets (see scripts/fetch_test_data.sh)
 data/
 
-# Agent working memory — local only, not pushed (see memory/README.md)
+# Local working notes — not pushed
 memory/
 datasets/
 
