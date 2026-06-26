@@ -1,8 +1,8 @@
 # OpenSplat — System Documentation
 
 **Dev & user documentation for OpenSplat**: what it is, how the pieces fit together, and how to
-build, run, and test it. This is *system* documentation — covering how OpenSplat works and how
-to build, run, and test it.
+build, run, and test it. This is *system* documentation — it covers how OpenSplat works
+internally, not how to contribute to it.
 
 OpenSplat is a free, open-source C++ implementation of **3D Gaussian Splatting**: it turns posed
 images + a sparse point cloud (COLMAP / OpenSfM / OpenMVG / ODM / Nerfstudio) into a `.ply`/`.splat`

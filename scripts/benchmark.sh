@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# benchmark.sh — run opensplat on a project and capture resource metrics to profiles/.
+# benchmark.sh — run opensplat on a project and capture resource metrics to memory/profiles/.
 # Captures: runtime, peak RAM, backend used. (CPU%/GPU%/thermal need powermetrics/sudo and are
 # left as TODO.)
 #
@@ -17,11 +17,12 @@ BIN="$REPO_ROOT/output/opensplat"
 
 [[ -x "$BIN" ]] || { echo "ERROR: $BIN not found. Build first (scripts/build.sh)." >&2; exit 1; }
 [[ -d "$PROJECT" ]] || { echo "ERROR: project dir not found: $PROJECT" >&2; exit 1; }
-mkdir -p "$REPO_ROOT/profiles" "$REPO_ROOT/splat_output"
+# memory/profiles/ (and splat_output/) are generated here on first run if not already present.
+mkdir -p "$REPO_ROOT/memory/profiles" "$REPO_ROOT/splat_output"
 
 STAMP="$(date +%Y%m%d-%H%M%S)"
 NIMG="$(ls -1 "$PROJECT/images" 2>/dev/null | wc -l | tr -d ' ')"
-OUT="$REPO_ROOT/profiles/bench_${LABEL}_n${ITERS}_${STAMP}.yaml"
+OUT="$REPO_ROOT/memory/profiles/bench_${LABEL}_n${ITERS}_${STAMP}.yaml"
 ERRLOG="$(mktemp)"; OUTLOG="$(mktemp)"
 trap 'rm -f "$ERRLOG" "$OUTLOG"' EXIT
 

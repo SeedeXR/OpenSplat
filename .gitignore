@@ -14,9 +14,6 @@ output/
 # Trained splats (.ply / .splat)
 splat_output/
 
-# Benchmark metric captures (local)
-profiles/
-
 # Downloaded test datasets (see scripts/fetch_test_data.sh)
 data/
 

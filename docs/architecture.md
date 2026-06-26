@@ -115,8 +115,8 @@ flowchart LR
 OpenSplat is a native C++/LibTorch application — there is no service/API/database layer, so
 those generic architecture dimensions are **N/A** rather than fabricated. Exact densification/
 pruning policy and loss weighting live in `src/model/model.cpp` and `src/app/opensplat.cpp` and
-will be documented with verified detail during the architecture deep-dive (future architecture deep-dive). Memory note: a single
-Gaussian is ~2000 bytes (~2 GB GPU memory per million Gaussians).
+will be documented with verified detail in a future architecture deep-dive. Memory note: a
+single Gaussian is ~2000 bytes (~2 GB GPU memory per million Gaussians).
 
 > This document records **verified** structure. Performance characteristics and detailed
 > algorithm parameters are added only after being read from code or measured — never assumed.
