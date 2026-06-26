@@ -106,9 +106,17 @@ static void readMeminfo(long long &totalMB, long long &availMB) {
 
 static bool queryNvidiaSmi(long long &totalMB, long long &freeMB) {
     totalMB = freeMB = 0;
+    // popen/pclose are POSIX; MSVC spells them _popen/_pclose, and the null device differs.
+    // (Only ever invoked when a CUDA device is present; Windows CI builds this but never runs it.)
+#if defined(_WIN32)
+    FILE *p = _popen("nvidia-smi --id=0 "
+                     "--query-gpu=memory.total,memory.free "
+                     "--format=csv,noheader,nounits 2>NUL", "r");
+#else
     FILE *p = popen("nvidia-smi --id=0 "
                     "--query-gpu=memory.total,memory.free "
                     "--format=csv,noheader,nounits 2>/dev/null", "r");
+#endif
     if (!p) return false;
     char buf[256] = {0};
     bool ok = false;
@@ -120,7 +128,11 @@ static bool queryNvidiaSmi(long long &totalMB, long long &freeMB) {
             totalMB = t; freeMB = fr; ok = (t > 0);
         }
     }
+#if defined(_WIN32)
+    _pclose(p);
+#else
     pclose(p);
+#endif
     return ok;
 }
 
